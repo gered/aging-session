@@ -1,7 +1,9 @@
 (ns aging-session.memory
   "In-memory session storage with mortality."
-  (:require [ring.middleware.session.store :refer :all])
-  (:import java.util.UUID))
+  (:require
+    [ring.middleware.session.store :refer :all])
+  (:import
+    [java.util UUID]))
 
 (defrecord SessionEntry [timestamp value])
 
@@ -45,7 +47,7 @@
 
 (defprotocol AgingStore
   (read-timestamp [store key]
-                  "Read a session from the store and return its timestamp. If no key exists, returns nil."))
+    "Read a session from the store and return its timestamp. If no key exists, returns nil."))
 
 (defrecord MemoryAgingStore [session-map refresh-on-write refresh-on-read req-count req-limit event-fns]
   AgingStore
@@ -61,8 +63,8 @@
 
   (write-session [_ key data]
     (let [key (or key (str (UUID/randomUUID)))]
-      (swap! req-count inc)	  ; Increase the request count
-      (if refresh-on-write    ; Write key and and update timestamp.
+      (swap! req-count inc)                                 ; Increase the request count
+      (if refresh-on-write                                  ; Write key and and update timestamp.
         (swap! session-map assoc key (new-entry data))
         (swap! session-map write-entry key data))
       key))
@@ -78,13 +80,13 @@
     (when (>= @req-count req-limit)
       (swap! session-map sweep-session event-fns)
       (reset! req-count 0))
-    (. Thread (sleep sweep-delay))  ;; sleep for 30s
+    (. Thread (sleep sweep-delay))                          ;; sleep for 30s
     (recur)))
 
 (defn in-thread
   "Run a function in a thread."
-  [afn]
-  (.start (Thread. afn)))
+  [f]
+  (.start (Thread. ^Runnable f)))
 
 (defn aging-memory-store
   "Creates an in-memory session storage engine."

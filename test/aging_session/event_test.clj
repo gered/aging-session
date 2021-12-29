@@ -1,8 +1,8 @@
 (ns aging-session.event_test
   (:require
-    [aging-session.event :as event]
     [clojure.test :refer :all]
     [ring.middleware.session.store :refer :all]
+    [aging-session.event :as event]
     [aging-session.memory :refer :all]))
 
 (deftest session-expiry
@@ -15,7 +15,7 @@
 (deftest session-expiry-by-sweep
   (testing "Test session expiry sweep."
     (let [as (aging-memory-store
-               :events      [(event/expires-after 1)]
+               :events [(event/expires-after 1)]
                :sweep-every 5
                :sweep-delay 1000)]
       (write-session as "mykey" {:foo 1})
