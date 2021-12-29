@@ -25,6 +25,9 @@ are also applied to every session when it is read.
 Here is the original [aging-session](https://github.com/kirasystems/aging-session) repository that this is forked from.
 This fork is based off of version 0.3.1. Subsequent versions added extra complexity which I do not want in this fork.
 
+I will be updating this repository with little tweaks and enhancements here and there, but for the most part intend
+to keep it nice and simple as it was originally.
+
 ### Rationale
 
 The current version of aging-session by Kira Systems became somewhat complicated over the past few years with all these 
