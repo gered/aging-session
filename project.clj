@@ -10,7 +10,8 @@
                         {:dependencies [[org.clojure/clojure "1.10.0"]]}
 
                         :dev
-                        {:dependencies   [[pjstadig/humane-test-output "0.11.0"]]
+                        {:dependencies   [[criterium "0.4.6"]
+                                          [pjstadig/humane-test-output "0.11.0"]]
                          :injections     [(require 'pjstadig.humane-test-output)
                                           (pjstadig.humane-test-output/activate!)]}}
 
