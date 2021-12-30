@@ -43,10 +43,15 @@ And that is _**totally**_ fine! :-) But it is not what I needed, thus I started 
 
 ### What about alternative libraries?
 
-The only real alternative library that I am aware of is [ring-ttl-session](https://github.com/luminus-framework/ring-ttl-session)
+The only real alternative library that I am aware of at this time is [ring-ttl-session](https://github.com/luminus-framework/ring-ttl-session)
 which is built on top of [ExpiringMap](https://github.com/jhalterman/expiringmap). For the most part this works well,
-but `ExpiringMap` has a number of issues with thread-safety (a couple of which I have hit recently) that have been 
-unresolved for a long while now. Which is unfortunate as it's otherwise a great looking library!
+and if your web app is like most web apps out there and you're only ever interacting with your session store via the 
+three methods found on Ring's `SessionStore` protocol (`read-session`, `write-session` and `delete-session`) then you
+likely will be very well served with ring-ttl-session.
+
+On the other hand, if you have more in-depth needs and do things such as inspect/iterate through the underlying session
+map to find sessions matching certain criteria (for example), then `ExpiringMap`s unresolved thread-safety issues will 
+very quickly become apparent and you will probably need to find an alternative solution.
 
 ## Usage
 
