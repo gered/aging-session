@@ -1,4 +1,4 @@
-(defproject net.gered/aging-session "0.1.0-SNAPSHOT"
+(defproject net.gered/aging-session "0.1.0"
   :description         "Memory based ring session with expiry and time based mutation."
   :url                 "https://github.com/gered/aging-session"
   :license             {:name "Eclipse Public License"
