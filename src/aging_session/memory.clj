@@ -73,7 +73,8 @@
 
   (write-session [_ key data]
     (let [key (or key (unique-id))]
-      (swap! op-counter inc)
+      (if op-threshold
+        (swap! op-counter inc))
       (if refresh-on-write
         (swap! session-map assoc key (new-entry data))
         (swap! session-map write-entry key data))
@@ -87,9 +88,10 @@
   "Sweeper thread that watches the session and cleans it."
   [{:keys [ttl op-counter op-threshold session-map]} sweep-interval]
   (loop []
-    (when (>= @op-counter op-threshold)
-      (swap! session-map sweep-session ttl)
-      (reset! op-counter 0))
+    (if op-threshold
+      (when (>= @op-counter op-threshold)
+        (swap! session-map sweep-session ttl)
+        (reset! op-counter 0)))
     (Thread/sleep sweep-interval)
     (recur)))
 
@@ -105,14 +107,14 @@
          :or   {session-atom     (atom {})
                 refresh-on-write true
                 refresh-on-read  true
-                sweep-threshold  200
+                sweep-threshold  nil
                 sweep-interval   30}} opts
         ; internally, we want time values as milliseconds. externally, it is more convenient to have them specified
         ; as seconds because, really, for sessions, no one is really going to want to specify sub-second values for
         ; any of these times! (no, you don't really need a sweeper thread running multiple times per second ...)
         sweep-interval (* 1000 sweep-interval)
         ttl            (* 1000 ttl)
-        op-counter     (atom 0)
+        op-counter     (if sweep-threshold (atom 0))
         store          (MemoryAgingStore. session-atom ttl refresh-on-write refresh-on-read op-counter sweep-threshold)]
     (in-thread #(sweeper-thread store sweep-interval))
     store))
