@@ -25,41 +25,42 @@
     (assoc session-map key (new-entry data))))
 
 (defn- update-entry
-  "Update a session entry based on event functions."
-  [event-fns ts [k v]]
-  (loop [entry v, fns (seq event-fns)]
-    (if (and entry fns)
-      (recur ((first fns) ts entry) (next fns))
-      (if entry [k entry]))))
+  "Update a session entry based on the configured session entry ttl."
+  [ttl now [k {:keys [timestamp] :as v}]]
+  (if v
+    (if-not (> (- now timestamp) ttl)
+      [k v])))
 
 (defn- sweep-session
   "Sweep the session and run all session functions."
-  [session-map event-fns]
-  (let [ts (now)]
-    (into {} (keep #(update-entry event-fns ts %) session-map))))
+  [session-map now ttl]
+  (into {} (keep #(update-entry ttl now %) session-map)))
 
 (defn- sweep-entry
   "Sweep a single entry."
-  [session-map event-fns key]
-  (if-let [[_ entry] (update-entry event-fns (now) [key (get session-map key)])]
-    (assoc session-map key entry)
-    (dissoc session-map key)))
+  [session-map now ttl key]
+  (if-let [existing-entry (get session-map key)]
+    (if-let [[_ entry] (update-entry ttl now [key existing-entry])]
+      (assoc session-map key entry)
+      (dissoc session-map key))
+    session-map))
 
 (defprotocol AgingStore
   (read-timestamp [store key]
     "Read a session from the store and return its timestamp. If no key exists, returns nil."))
 
-(defrecord MemoryAgingStore [session-map refresh-on-write refresh-on-read req-count req-limit event-fns]
+(defrecord MemoryAgingStore [session-map ttl refresh-on-write refresh-on-read req-count req-limit]
   AgingStore
   (read-timestamp [_ key]
     (get-in @session-map [key :timestamp]))
 
   SessionStore
   (read-session [_ key]
-    (swap! session-map sweep-entry event-fns key)
-    (when (and refresh-on-read (contains? @session-map key))
-      (swap! session-map assoc-in [key :timestamp] (now)))
-    (get-in @session-map [key :value]))
+    (let [ts (now)]
+      (swap! session-map sweep-entry ts ttl key)
+      (when (and refresh-on-read (contains? @session-map key))
+        (swap! session-map assoc-in [key :timestamp] ts))
+      (get-in @session-map [key :value])))
 
   (write-session [_ key data]
     (let [key (or key (str (UUID/randomUUID)))]
@@ -75,12 +76,12 @@
 
 (defn sweeper-thread
   "Sweeper thread that watches the session and cleans it."
-  [{:keys [req-count req-limit session-map event-fns]} sweep-delay]
+  [{:keys [ttl req-count req-limit session-map]} sweep-delay]
   (loop []
     (when (>= @req-count req-limit)
-      (swap! session-map sweep-session event-fns)
+      (swap! session-map sweep-session (now) ttl)
       (reset! req-count 0))
-    (. Thread (sleep sweep-delay))                          ;; sleep for 30s
+    (Thread/sleep sweep-delay)                              ;; sleep for 30s
     (recur)))
 
 (defn in-thread
@@ -89,17 +90,17 @@
   (.start (Thread. ^Runnable f)))
 
 (defn aging-memory-store
-  "Creates an in-memory session storage engine."
-  [& opts]
-  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-every sweep-delay events]
+  "Creates an in-memory session storage engine where entries expire after the given ttl"
+  [ttl & [opts]]
+  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-every sweep-delay]
          :or   {session-atom     (atom {})
                 refresh-on-write false
                 refresh-on-read  false
                 sweep-every      200
-                sweep-delay      30000
-                events           []}} opts
+                sweep-delay      30000}} opts
+        ttl          (* 1000 ttl)                           ; internally, we want ttl in milliseconds for convenience...
         counter-atom (atom 0)
-        store        (MemoryAgingStore. session-atom refresh-on-write refresh-on-read counter-atom sweep-every events)]
+        store        (MemoryAgingStore. session-atom ttl refresh-on-write refresh-on-read counter-atom sweep-every)]
     (in-thread #(sweeper-thread store sweep-delay))
     store))
 

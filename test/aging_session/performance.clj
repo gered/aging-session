@@ -4,7 +4,6 @@
     [criterium.core :refer [quick-bench]]
     [ring.middleware.session.store :refer :all]
     [ring.middleware.session.memory :refer [memory-store]]
-    [aging-session.event :as event]
     [aging-session.memory :refer [aging-memory-store]]))
 
 ; these are copied from ring-ttl-session's benchmarks so that i can see how the performance of
@@ -17,9 +16,9 @@
 (defn ->aging-memory-store
   [ttl]
   (aging-memory-store
-    :refresh-on-write true
-    :refresh-on-read true
-    :events [(event/expires-after ttl)]))
+    ttl
+    {:refresh-on-write true
+     :refresh-on-read  true}))
 
 (defn check-nonexistent-read
   []
