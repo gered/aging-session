@@ -7,7 +7,7 @@
 (deftest basic-read-empty
   (testing "Test session reads."
     (let [as (aging-memory-store)]
-      (is (= (read-session as "mykey") {})))))
+      (is (nil? (read-session as "mykey"))))))
 
 (deftest basic-write
   (testing "Test session writes and reads."
@@ -22,7 +22,7 @@
     (let [as (aging-memory-store)]
       (write-session as "mykey" {:a 1})
       (delete-session as "mykey")
-      (is (= (read-session as "mykey") {})))))
+      (is (nil? (read-session as "mykey"))))))
 
 (deftest timestamp-on-creation
   (testing "Test the behaviour where each entry's timestamp is set only on session creation."

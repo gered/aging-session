@@ -10,7 +10,7 @@
     (let [as (aging-memory-store :events [(event/expires-after 1)])]
       (write-session as "mykey" {:foo 1})
       (. Thread (sleep 1500))
-      (is (= (read-session as "mykey") {})))))
+      (is (nil? (read-session as "mykey"))))))
 
 (deftest session-expiry-by-sweep
   (testing "Test session expiry sweep."
@@ -43,6 +43,6 @@
                :refresh-on-read true
                :sweep-every 1
                :sweep-delay 1000)]
-      (is (= (read-session as "foo") {}))
+      (is (nil? (read-session as "foo")))
       ; read again to trigger the sweep
-      (is (= (read-session as "foo") {})))))
+      (is (nil? (read-session as "foo"))))))

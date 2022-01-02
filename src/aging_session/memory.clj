@@ -59,7 +59,7 @@
     (swap! session-map sweep-entry event-fns key)
     (when (and refresh-on-read (contains? @session-map key))
       (swap! session-map assoc-in [key :timestamp] (now)))
-    (get-in @session-map [key :value] {}))
+    (get-in @session-map [key :value]))
 
   (write-session [_ key data]
     (let [key (or key (str (UUID/randomUUID)))]
