@@ -103,8 +103,8 @@
   [ttl & [opts]]
   (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-threshold sweep-interval]
          :or   {session-atom     (atom {})
-                refresh-on-write false
-                refresh-on-read  false
+                refresh-on-write true
+                refresh-on-read  true
                 sweep-threshold  200
                 sweep-interval   30}} opts
         ; internally, we want time values as milliseconds. externally, it is more convenient to have them specified
