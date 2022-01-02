@@ -91,7 +91,8 @@
     (if op-threshold
       (when (>= @op-counter op-threshold)
         (swap! session-map sweep-session ttl)
-        (reset! op-counter 0)))
+        (reset! op-counter 0))
+      (swap! session-map sweep-session ttl))
     (Thread/sleep sweep-interval)
     (recur)))
 
