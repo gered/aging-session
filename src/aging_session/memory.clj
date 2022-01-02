@@ -27,23 +27,23 @@
 (defn- entry-expired?
   "Returns true if the given session entry has expired according to its current timestamp and the session store's
    configured ttl"
-  [ttl now v]
+  [ttl v]
   (and v
-       (> (- now (:timestamp v))
+       (> (- (now) (:timestamp v))
           ttl)))
 
 (defn- sweep-session
   "Sweep the session and run all session functions."
-  [session-map now ttl]
+  [session-map ttl]
   (->> session-map
-       (remove #(entry-expired? ttl now (val %)))
+       (remove #(entry-expired? ttl (val %)))
        (into {})))
 
 (defn- sweep-entry
   "Sweep a single entry."
-  [session-map now ttl key]
+  [session-map ttl key]
   (if-let [existing-entry (get session-map key)]
-    (if-not (entry-expired? ttl now existing-entry)
+    (if-not (entry-expired? ttl existing-entry)
       (assoc session-map key existing-entry)
       (dissoc session-map key))
     session-map))
@@ -60,10 +60,10 @@
   SessionStore
   (read-session [_ key]
     (when (contains? @session-map key)
-      (let [ts (now)]
-        (swap! session-map sweep-entry ts ttl key)
+      (let []
+        (swap! session-map sweep-entry ttl key)
         (when (and refresh-on-read (contains? @session-map key))
-          (swap! session-map assoc-in [key :timestamp] ts))
+          (swap! session-map assoc-in [key :timestamp] (now)))
         (get-in @session-map [key :value]))))
 
   (write-session [_ key data]
@@ -83,7 +83,7 @@
   [{:keys [ttl req-count req-limit session-map]} sweep-delay]
   (loop []
     (when (>= @req-count req-limit)
-      (swap! session-map sweep-session (now) ttl)
+      (swap! session-map sweep-session ttl)
       (reset! req-count 0))
     (Thread/sleep sweep-delay)                              ;; sleep for 30s
     (recur)))
