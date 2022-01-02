@@ -56,11 +56,12 @@
 
   SessionStore
   (read-session [_ key]
-    (let [ts (now)]
-      (swap! session-map sweep-entry ts ttl key)
-      (when (and refresh-on-read (contains? @session-map key))
-        (swap! session-map assoc-in [key :timestamp] ts))
-      (get-in @session-map [key :value])))
+    (when (contains? @session-map key)
+      (let [ts (now)]
+        (swap! session-map sweep-entry ts ttl key)
+        (when (and refresh-on-read (contains? @session-map key))
+          (swap! session-map assoc-in [key :timestamp] ts))
+        (get-in @session-map [key :value]))))
 
   (write-session [_ key data]
     (let [key (or key (str (UUID/randomUUID)))]
