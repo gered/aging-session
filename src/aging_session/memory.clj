@@ -7,6 +7,11 @@
 
 (defrecord SessionEntry [timestamp value])
 
+(defn- unique-id
+  "Returns a new unique value suitable for a session ID."
+  []
+  (str (UUID/randomUUID)))
+
 (defn- now
   "Return the current time in milliseconds."
   []
@@ -67,7 +72,7 @@
         (get-in @session-map [key :value]))))
 
   (write-session [_ key data]
-    (let [key (or key (str (UUID/randomUUID)))]
+    (let [key (or key (unique-id))]
       (swap! req-count inc)                                 ; Increase the request count
       (if refresh-on-write                                  ; Write key and and update timestamp.
         (swap! session-map assoc key (new-entry data))
