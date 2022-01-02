@@ -38,14 +38,14 @@
           ttl)))
 
 (defn- sweep-session
-  "Sweep the session and run all session functions."
+  "'Sweep' the session map, removing all entries whose lifetimes have exceeded the given ttl."
   [session-map ttl]
   (->> session-map
        (remove #(entry-expired? ttl (val %)))
        (into {})))
 
 (defn- sweep-entry
-  "Sweep a single entry."
+  "'Sweep' a single entry, removing it from the session map if its lifetime has exceeded the given ttl."
   [session-map ttl key]
   (if-let [existing-entry (get session-map key)]
     (if-not (entry-expired? ttl existing-entry)
