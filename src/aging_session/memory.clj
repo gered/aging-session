@@ -24,24 +24,27 @@
     (assoc-in session-map [key :value] data)
     (assoc session-map key (new-entry data))))
 
-(defn- update-entry
-  "Update a session entry based on the configured session entry ttl."
-  [ttl now [k {:keys [timestamp] :as v}]]
-  (if v
-    (if-not (> (- now timestamp) ttl)
-      [k v])))
+(defn- entry-expired?
+  "Returns true if the given session entry has expired according to its current timestamp and the session store's
+   configured ttl"
+  [ttl now v]
+  (and v
+       (> (- now (:timestamp v))
+          ttl)))
 
 (defn- sweep-session
   "Sweep the session and run all session functions."
   [session-map now ttl]
-  (into {} (keep #(update-entry ttl now %) session-map)))
+  (->> session-map
+       (remove #(entry-expired? ttl now (val %)))
+       (into {})))
 
 (defn- sweep-entry
   "Sweep a single entry."
   [session-map now ttl key]
   (if-let [existing-entry (get session-map key)]
-    (if-let [[_ entry] (update-entry ttl now [key existing-entry])]
-      (assoc session-map key entry)
+    (if-not (entry-expired? ttl now existing-entry)
+      (assoc session-map key existing-entry)
       (dissoc session-map key))
     session-map))
 
