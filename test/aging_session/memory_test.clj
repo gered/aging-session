@@ -6,7 +6,14 @@
 
 (defn ->basic-aging-memory-store
   [& [opts]]
-  (aging-memory-store 30 opts))
+  (aging-memory-store
+    30
+    (merge
+      {:refresh-on-read  true
+       :refresh-on-write true
+       :sweep-threshold  nil
+       :sweep-interval   15}
+      opts)))
 
 (deftest basic-read-empty
   (testing "Test session reads when there is no session value for that key."
@@ -36,7 +43,9 @@
 
 (deftest timestamp-on-creation
   (testing "Test the behaviour where each entry's timestamp is set only on session creation."
-    (let [as (->basic-aging-memory-store)]
+    (let [as (->basic-aging-memory-store
+               {:refresh-on-read  false
+                :refresh-on-write false})]
       (write-session as "mykey" {:foo 1})
       (let [ts1 (read-timestamp as "mykey")]
         (is (integer? ts1)
@@ -50,7 +59,9 @@
 
 (deftest timestamp-on-write-only
   (testing "Test the behaviour where each entry's timestamp is refreshed on write (not read)."
-    (let [as (->basic-aging-memory-store {:refresh-on-write true})]
+    (let [as (->basic-aging-memory-store
+               {:refresh-on-read  false
+                :refresh-on-write true})]
       (write-session as "mykey" {:foo 1})
       (let [ts1 (read-timestamp as "mykey")]
         (is (integer? ts1)
@@ -69,7 +80,9 @@
 
 (deftest timestamp-on-read-only
   (testing "Test the behaviour where each entry's timestamp is refreshed on read (not write)."
-    (let [as (->basic-aging-memory-store {:refresh-on-read true})]
+    (let [as (->basic-aging-memory-store
+               {:refresh-on-read  true
+                :refresh-on-write false})]
       (write-session as "mykey" {:foo 1})
       (let [ts1 (read-timestamp as "mykey")]
         (is (integer? ts1)
@@ -96,26 +109,29 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(deftest session-expiry
-  (testing "Test session expiry."
-    ; store where entries should expire after 1 second
-    (let [as (aging-memory-store 1)]
+(deftest individual-session-entries-are-expired-when-read
+  (testing "Individual session entries are expired appropriately when read, independently of the sweep thread."
+    (let [as (aging-memory-store
+               1                                            ; expire after 1 second
+               {:sweep-threshold 1                          ; sweeper thread write threshold is after every single write
+                :sweep-interval  10                         ; sweeper thread tries to run every 10 seconds
+                })]
       (write-session as "mykey" {:foo 1})
       (is (= (read-session as "mykey") {:foo 1})
           "session entry was written")
-      (Thread/sleep 1500)
+      (Thread/sleep 1500)                                   ; little delay, but too short for sweeper thread to have run
       (is (nil? (read-session as "mykey"))
           "session entry should no longer be present"))))
 
-(deftest session-expiry-by-sweep
-  (testing "Test session expiry sweep."
+(deftest sweeper-thread-expires-entries-when-triggered-by-threshold
+  (testing "Sweeper thread expires entries when it runs, only when the operation (write) threshold is reached."
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
-               {:sweep-every 5                              ; only trigger sweep after 5 writes
-                :sweep-delay 1000                           ; sweep thread tries to run every 1 second
+               {:sweep-threshold 5                          ; only trigger sweep after 5 writes
+                :sweep-interval  1                          ; sweep thread tries to run every 1 second
                 })]
       (write-session as "mykey" {:foo 1})
-      (Thread/sleep 1500)
+      (Thread/sleep 2000)                                   ; wait long enough for session ttl to elapse
       ; key should still exist, even though it's expired (not enough writes have occurred)
       (is (integer? (read-timestamp as "mykey"))
           "session entry should still be present even though it has expired")
@@ -137,13 +153,13 @@
       (is (nil? (read-timestamp as "mykey"))
           "session entry should have been removed now"))))
 
-(deftest refresh-on-read-nonexistant-key-then-sweep
+(deftest refresh-on-read-nonexistent-key-then-sweep
   (testing "Test an empty session read (with refresh-on-read enabled) then check that the expiry sweep still works"
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
                {:refresh-on-read true
-                :sweep-every     1                          ; sweep runs after every write
-                :sweep-delay     1000                       ; sweep thread tries to run every 1 second
+                :sweep-threshold 1                          ; sweep runs after every write
+                :sweep-interval  1                          ; sweep thread tries to run every 1 second
                 })]
       (is (nil? (read-session as "foo"))
           "no session entry present for this key")
