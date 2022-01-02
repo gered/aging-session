@@ -83,7 +83,7 @@
     (swap! session-map dissoc key)
     nil))
 
-(defn sweeper-thread
+(defn- sweeper-thread
   "Sweeper thread that watches the session and cleans it."
   [{:keys [ttl op-counter op-threshold session-map]} sweep-interval]
   (loop []
@@ -93,7 +93,7 @@
     (Thread/sleep sweep-interval)
     (recur)))
 
-(defn in-thread
+(defn- in-thread
   "Run a function in a thread."
   [f]
   (.start (Thread. ^Runnable f)))
