@@ -57,7 +57,7 @@
   (read-timestamp [store key]
     "Read a session from the store and return its timestamp. If no key exists, returns nil."))
 
-(defrecord MemoryAgingStore [session-map ttl refresh-on-write refresh-on-read req-count req-limit]
+(defrecord MemoryAgingStore [session-map ttl refresh-on-write refresh-on-read op-counter op-threshold]
   AgingStore
   (read-timestamp [_ key]
     (get-in @session-map [key :timestamp]))
@@ -73,8 +73,8 @@
 
   (write-session [_ key data]
     (let [key (or key (unique-id))]
-      (swap! req-count inc)                                 ; Increase the request count
-      (if refresh-on-write                                  ; Write key and and update timestamp.
+      (swap! op-counter inc)
+      (if refresh-on-write
         (swap! session-map assoc key (new-entry data))
         (swap! session-map write-entry key data))
       key))
@@ -85,12 +85,12 @@
 
 (defn sweeper-thread
   "Sweeper thread that watches the session and cleans it."
-  [{:keys [ttl req-count req-limit session-map]} sweep-delay]
+  [{:keys [ttl op-counter op-threshold session-map]} sweep-interval]
   (loop []
-    (when (>= @req-count req-limit)
+    (when (>= @op-counter op-threshold)
       (swap! session-map sweep-session ttl)
-      (reset! req-count 0))
-    (Thread/sleep sweep-delay)                              ;; sleep for 30s
+      (reset! op-counter 0))
+    (Thread/sleep sweep-interval)
     (recur)))
 
 (defn in-thread
@@ -101,15 +101,19 @@
 (defn aging-memory-store
   "Creates an in-memory session storage engine where entries expire after the given ttl"
   [ttl & [opts]]
-  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-every sweep-delay]
+  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-threshold sweep-interval]
          :or   {session-atom     (atom {})
                 refresh-on-write false
                 refresh-on-read  false
-                sweep-every      200
-                sweep-delay      30000}} opts
-        ttl          (* 1000 ttl)                           ; internally, we want ttl in milliseconds for convenience...
-        counter-atom (atom 0)
-        store        (MemoryAgingStore. session-atom ttl refresh-on-write refresh-on-read counter-atom sweep-every)]
-    (in-thread #(sweeper-thread store sweep-delay))
+                sweep-threshold  200
+                sweep-interval   30}} opts
+        ; internally, we want time values as milliseconds. externally, it is more convenient to have them specified
+        ; as seconds because, really, for sessions, no one is really going to want to specify sub-second values for
+        ; any of these times! (no, you don't really need a sweeper thread running multiple times per second ...)
+        sweep-interval (* 1000 sweep-interval)
+        ttl            (* 1000 ttl)
+        op-counter     (atom 0)
+        store          (MemoryAgingStore. session-atom ttl refresh-on-write refresh-on-read op-counter sweep-threshold)]
+    (in-thread #(sweeper-thread store sweep-interval))
     store))
 
