@@ -123,12 +123,14 @@
       (is (nil? (read-session as "mykey"))
           "session entry should no longer be present"))))
 
-(deftest sweeper-thread-expires-entries-when-triggered-by-threshold
-  (testing "Sweeper thread expires entries when it runs, only when the operation (write) threshold is reached."
+(deftest sweeper-thread-expires-entries-at-interval-only-when-threshold-reached
+  (testing "When a threshold is specified, the sweeper thread expires entries whenever it runs only when the operation (write) threshold is reached."
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
-               {:sweep-threshold 5                          ; only trigger sweep after 5 writes
-                :sweep-interval  1                          ; sweep thread tries to run every 1 second
+               {:refresh-on-read  true
+                :refresh-on-write true
+                :sweep-threshold  5                         ; only trigger sweep after 5 writes
+                :sweep-interval   1                         ; sweeper thread tries to run every 1 second
                 })]
       (write-session as "mykey" {:foo 1})
       (Thread/sleep 2000)                                   ; wait long enough for session ttl to elapse
@@ -152,6 +154,49 @@
       (Thread/sleep 2000)                                   ; allow time for sweeper thread to run
       (is (nil? (read-timestamp as "mykey"))
           "session entry should have been removed now"))))
+
+(deftest sweeper-thread-expires-entries-at-interval-with-no-threshold-set
+  (testing "When a threshold is NOT specified, the sweeper thread expires entries whenever it runs."
+    (let [as (aging-memory-store
+               1                                            ; expire after 1 second
+               {:refresh-on-read  true
+                :refresh-on-write true
+                :sweep-threshold  nil                       ; no sweeper thread threshold
+                :sweep-interval   1                         ; sweeper thread tries to run every 1 second
+                })]
+      (write-session as "mykey" {:foo 1})
+      (Thread/sleep 20)
+      (is (integer? (read-timestamp as "mykey"))
+          "session entry should still be present")
+
+      ; do nothing in the mean time (no write operations)
+
+      (Thread/sleep 2000)                                   ; wait long enough for session ttl to elapse
+      (is (nil? (read-timestamp as "mykey"))
+          "session entry should have been removed now")
+
+      ; now lets do this again, but read the value (thus, triggering a timestamp refresh) a couple times
+
+      (is (nil? (read-session as "mykey"))
+          "session entry should not be there yet")
+      (write-session as "mykey" {:foo 1})
+      (is (= (read-session as "mykey") {:foo 1})
+          "session entry should now be present")
+
+      ; repeatedly re-read the session for a period of time over the session store ttl so as to not let
+      ; it expire (because refresh-on-read is enabled)
+      (doseq [_ (range 10)]
+        (Thread/sleep 200)
+        (is (= (read-session as "mykey") {:foo 1})
+            "session entry should still be present"))
+
+      ; now wait long enough without reading to let it expire
+
+      (Thread/sleep 2000)
+      (is (nil? (read-session as "mykey"))
+          "session entry should be gone now")
+
+      )))
 
 (deftest refresh-on-read-nonexistent-key-then-sweep
   (testing "Test an empty session read (with refresh-on-read enabled) then check that the expiry sweep still works"
