@@ -129,3 +129,8 @@
   (if store
     (.interrupt ^Thread (.thread store))))
 
+(defn get-all-sessions
+  "Convenience function that returns all the session entries currently in the aging-memory-store provided."
+  [^MemoryAgingStore store]
+  (if store
+    @(.session_atom store)))

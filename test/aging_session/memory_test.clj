@@ -225,4 +225,13 @@
     (is (not (.isAlive ^Thread (:thread as)))
         "sweeper thread is no longer alive")))
 
+(deftest can-get-all-sessions
+  (let [as (->basic-aging-memory-store)]
+    (write-session as "a" {:foo 1})
+    (write-session as "b" {:bar 2})
+    (let [sessions (get-all-sessions as)]
+      (is (= 2 (count sessions)))
+      (is (= (get-in sessions ["a" :value]) {:foo 1}))
+      (is (= (get-in sessions ["b" :value]) {:bar 2})))))
+
 #_(run-tests)
