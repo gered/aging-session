@@ -55,12 +55,18 @@
 
 (defprotocol AgingStore
   (read-timestamp [store key]
-    "Read a session from the store and return its timestamp. If no key exists, returns nil."))
+    "Read a session from the store and return its timestamp. If no key exists, returns nil.")
+
+  (all-entries [store]
+    "Returns a map containing all entries currently in the session store."))
 
 (defrecord MemoryAgingStore [session-atom thread ttl refresh-on-write refresh-on-read op-counter op-threshold]
   AgingStore
   (read-timestamp [_ key]
     (get-in @session-atom [key :timestamp]))
+
+  (all-entries [_]
+    @session-atom)
 
   SessionStore
   (read-session [_ key]
@@ -116,7 +122,8 @@
                            (try
                              (sweeper-thread session-atom ttl op-counter sweep-threshold sweep-interval)
                              (catch InterruptedException e))))
-        store          (MemoryAgingStore. session-atom thread ttl refresh-on-write refresh-on-read op-counter sweep-threshold)]
+        store          (MemoryAgingStore.
+                         session-atom thread ttl refresh-on-write refresh-on-read op-counter sweep-threshold)]
     (.start thread)
     store))
 
@@ -127,9 +134,3 @@
   [^MemoryAgingStore store]
   (if store
     (.interrupt ^Thread (.thread store))))
-
-(defn get-all-sessions
-  "Convenience function that returns all the session entries currently in the aging-memory-store provided."
-  [^MemoryAgingStore store]
-  (if store
-    @(.session_atom store)))
