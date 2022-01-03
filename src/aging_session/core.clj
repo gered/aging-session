@@ -40,10 +40,8 @@
 (defn- sweep-entry
   "'Sweep' a single entry, removing it from the session map if its lifetime has exceeded the given ttl."
   [session-map ttl key]
-  (if-let [existing-entry (get session-map key)]
-    (if-not (entry-expired? ttl existing-entry)
-      (assoc session-map key existing-entry)
-      (dissoc session-map key))
+  (if (entry-expired? ttl (get session-map key))
+    (dissoc session-map key)
     session-map))
 
 (defn- process-read-entry
