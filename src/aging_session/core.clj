@@ -52,7 +52,7 @@
   (let [session-map (sweep-entry session-map ttl key)]
     (if (and refresh-on-read?
              (contains? session-map key))
-      (assoc-in session-map [key :timestamp] (now))
+      (update session-map key assoc :timestamp (now))       ; note: performs faster than assoc-in
       session-map)))
 
 (defn- process-write-entry
@@ -64,7 +64,7 @@
     ; when not refreshing-on-write, we only need to update the entry value if there is an existing entry. otherwise,
     ; it is of course a brand new entry
     (if (contains? session-map key)
-      (assoc-in session-map [key :value] data)
+      (update session-map key assoc :value data)            ; note: performs faster than assoc-in
       (assoc session-map key (new-entry data)))))
 
 (defprotocol AgingStore
@@ -87,7 +87,9 @@
     (when (contains? @session-atom key)
       (let [session-map (swap! session-atom process-read-entry ttl key refresh-on-read)]
         (if (contains? session-map key)
-          (get-in session-map [key :value])
+          (-> session-map                                   ; note: performs faster than get-in
+              (get key)
+              (get :value))
           ; TODO: notify expiry listener about expired 'key' here
           ))))
 
