@@ -65,11 +65,10 @@
   SessionStore
   (read-session [_ key]
     (when (contains? @session-atom key)
-      (let []
-        (swap! session-atom sweep-entry ttl key)
-        (when (and refresh-on-read (contains? @session-atom key))
-          (swap! session-atom assoc-in [key :timestamp] (now)))
-        (get-in @session-atom [key :value]))))
+      (swap! session-atom sweep-entry ttl key)
+      (when (and refresh-on-read (contains? @session-atom key))
+        (swap! session-atom assoc-in [key :timestamp] (now)))
+      (get-in @session-atom [key :value])))
 
   (write-session [_ key data]
     (let [key (or key (unique-id))]
