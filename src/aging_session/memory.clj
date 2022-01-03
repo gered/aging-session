@@ -57,42 +57,42 @@
   (read-timestamp [store key]
     "Read a session from the store and return its timestamp. If no key exists, returns nil."))
 
-(defrecord MemoryAgingStore [session-map thread ttl refresh-on-write refresh-on-read op-counter op-threshold]
+(defrecord MemoryAgingStore [session-atom thread ttl refresh-on-write refresh-on-read op-counter op-threshold]
   AgingStore
   (read-timestamp [_ key]
-    (get-in @session-map [key :timestamp]))
+    (get-in @session-atom [key :timestamp]))
 
   SessionStore
   (read-session [_ key]
-    (when (contains? @session-map key)
+    (when (contains? @session-atom key)
       (let []
-        (swap! session-map sweep-entry ttl key)
-        (when (and refresh-on-read (contains? @session-map key))
-          (swap! session-map assoc-in [key :timestamp] (now)))
-        (get-in @session-map [key :value]))))
+        (swap! session-atom sweep-entry ttl key)
+        (when (and refresh-on-read (contains? @session-atom key))
+          (swap! session-atom assoc-in [key :timestamp] (now)))
+        (get-in @session-atom [key :value]))))
 
   (write-session [_ key data]
     (let [key (or key (unique-id))]
       (if op-threshold
         (swap! op-counter inc))
       (if refresh-on-write
-        (swap! session-map assoc key (new-entry data))
-        (swap! session-map write-entry key data))
+        (swap! session-atom assoc key (new-entry data))
+        (swap! session-atom write-entry key data))
       key))
 
   (delete-session [_ key]
-    (swap! session-map dissoc key)
+    (swap! session-atom dissoc key)
     nil))
 
 (defn- sweeper-thread
   "Sweeper thread that watches the session and cleans it."
-  [session-map ttl op-counter op-threshold sweep-interval]
+  [session-atom ttl op-counter op-threshold sweep-interval]
   (loop []
     (if op-threshold
       (when (>= @op-counter op-threshold)
-        (swap! session-map sweep-session ttl)
+        (swap! session-atom sweep-session ttl)
         (reset! op-counter 0))
-      (swap! session-map sweep-session ttl))
+      (swap! session-atom sweep-session ttl))
     (Thread/sleep sweep-interval)
     (recur)))
 
