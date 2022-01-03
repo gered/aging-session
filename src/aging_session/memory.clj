@@ -57,7 +57,7 @@
   (read-timestamp [store key]
     "Read a session from the store and return its timestamp. If no key exists, returns nil."))
 
-(defrecord MemoryAgingStore [session-map ttl refresh-on-write refresh-on-read op-counter op-threshold]
+(defrecord MemoryAgingStore [session-map thread ttl refresh-on-write refresh-on-read op-counter op-threshold]
   AgingStore
   (read-timestamp [_ key]
     (get-in @session-map [key :timestamp]))
@@ -86,7 +86,7 @@
 
 (defn- sweeper-thread
   "Sweeper thread that watches the session and cleans it."
-  [{:keys [ttl op-counter op-threshold session-map]} sweep-interval]
+  [session-map ttl op-counter op-threshold sweep-interval]
   (loop []
     (if op-threshold
       (when (>= @op-counter op-threshold)
@@ -95,11 +95,6 @@
       (swap! session-map sweep-session ttl))
     (Thread/sleep sweep-interval)
     (recur)))
-
-(defn- in-thread
-  "Run a function in a thread."
-  [f]
-  (.start (Thread. ^Runnable f)))
 
 (defn aging-memory-store
   "Creates an in-memory session storage engine where entries expire after the given ttl"
@@ -116,7 +111,21 @@
         sweep-interval (* 1000 sweep-interval)
         ttl            (* 1000 ttl)
         op-counter     (if sweep-threshold (atom 0))
-        store          (MemoryAgingStore. session-atom ttl refresh-on-write refresh-on-read op-counter sweep-threshold)]
-    (in-thread #(sweeper-thread store sweep-interval))
+        thread         (Thread.
+                         ^Runnable
+                         (fn []
+                           (try
+                             (sweeper-thread session-atom ttl op-counter sweep-threshold sweep-interval)
+                             (catch InterruptedException e))))
+        store          (MemoryAgingStore. session-atom thread ttl refresh-on-write refresh-on-read op-counter sweep-threshold)]
+    (.start thread)
     store))
+
+(defn stop
+  "Stops the aging-memory-store. Currently only provided as a convenience for applications that need to restart their
+   web handler. This function should be used in such a case to stop the sweeper-thread. The vast majority of apps won't
+   need to call this ever."
+  [^MemoryAgingStore store]
+  (if store
+    (.interrupt ^Thread (.thread store))))
 

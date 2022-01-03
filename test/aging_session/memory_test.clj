@@ -213,4 +213,16 @@
       (is (nil? (read-session as "foo"))
           "still no session entry present for this key"))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(deftest sweeper-thread-can-be-stopped
+  (let [as (->basic-aging-memory-store)]
+    (Thread/sleep 2000)
+    (is (.isAlive ^Thread (:thread as))
+        "sweeper thread is currently alive")
+    (stop as)
+    (Thread/sleep 1000)
+    (is (not (.isAlive ^Thread (:thread as)))
+        "sweeper thread is no longer alive")))
+
 #_(run-tests)
