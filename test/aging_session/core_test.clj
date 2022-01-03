@@ -1,8 +1,8 @@
-(ns aging-session.memory_test
+(ns aging-session.core-test
   (:require
     [clojure.test :refer :all]
     [ring.middleware.session.store :refer :all]
-    [aging-session.memory :refer :all]))
+    [aging-session.core :refer :all]))
 
 (defn ->basic-aging-memory-store
   [& [opts]]

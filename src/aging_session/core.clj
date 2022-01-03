@@ -1,4 +1,4 @@
-(ns aging-session.memory
+(ns aging-session.core
   "In-memory session storage with mortality."
   (:require
     [ring.middleware.session.store :refer :all])

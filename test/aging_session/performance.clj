@@ -4,7 +4,7 @@
     [criterium.core :refer [quick-bench]]
     [ring.middleware.session.store :refer :all]
     [ring.middleware.session.memory :refer [memory-store]]
-    [aging-session.memory :refer [aging-memory-store]]))
+    [aging-session.core :refer [aging-memory-store]]))
 
 ; these are copied from ring-ttl-session's benchmarks so that i can see how the performance of
 ; aging-session compares against it.
