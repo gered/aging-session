@@ -22,13 +22,6 @@
   [data]
   (SessionEntry. (now) data))
 
-(defn- write-entry
-  "Write over an existing entry. If timestamp is missing, recreate."
-  [session-map key data]
-  (if (get-in session-map [key :timestamp])
-    (assoc-in session-map [key :value] data)
-    (assoc session-map key (new-entry data))))
-
 (defn- entry-expired?
   "Returns true if the given session entry has expired according to its current timestamp and the session store's
    configured ttl"
@@ -53,6 +46,27 @@
       (dissoc session-map key))
     session-map))
 
+(defn- process-read-entry
+  [session-map ttl key refresh-on-read?]
+  ; call sweep-entry on this key first, to ensure this key is expired if needed BEFORE we allow its value to be read
+  (let [session-map (sweep-entry session-map ttl key)]
+    (if (and refresh-on-read?
+             (contains? session-map key))
+      (assoc-in session-map [key :timestamp] (now))
+      session-map)))
+
+(defn- process-write-entry
+  [session-map key data refresh-on-write?]
+  (if refresh-on-write?
+    ; just blindly write a new entry if we're refreshing-on-write, as obviously in that case, we don't care what,
+    ; if any, existing value and timestamp was there to begin with ...
+    (assoc session-map key (new-entry data))
+    ; when not refreshing-on-write, we only need to update the entry value if there is an existing entry. otherwise,
+    ; it is of course a brand new entry
+    (if (contains? session-map key)
+      (assoc-in session-map [key :value] data)
+      (assoc session-map key (new-entry data)))))
+
 (defprotocol AgingStore
   (read-timestamp [store key]
     "Read a session from the store and return its timestamp. If no key exists, returns nil.")
@@ -71,18 +85,17 @@
   SessionStore
   (read-session [_ key]
     (when (contains? @session-atom key)
-      (swap! session-atom sweep-entry ttl key)
-      (when (and refresh-on-read (contains? @session-atom key))
-        (swap! session-atom assoc-in [key :timestamp] (now)))
-      (get-in @session-atom [key :value])))
+      (let [session-map (swap! session-atom process-read-entry ttl key refresh-on-read)]
+        (if (contains? session-map key)
+          (get-in session-map [key :value])
+          ; TODO: notify expiry listener about expired 'key' here
+          ))))
 
   (write-session [_ key data]
     (let [key (or key (unique-id))]
       (if op-threshold
         (swap! op-counter inc))
-      (if refresh-on-write
-        (swap! session-atom assoc key (new-entry data))
-        (swap! session-atom write-entry key data))
+      (swap! session-atom process-write-entry key data refresh-on-write)
       key))
 
   (delete-session [_ key]
