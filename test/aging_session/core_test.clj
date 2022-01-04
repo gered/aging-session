@@ -234,4 +234,88 @@
       (is (= (get-in sessions ["a" :value]) {:foo 1}))
       (is (= (get-in sessions ["b" :value]) {:bar 2})))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(deftest expiry-listener-triggered-when-read-session-expires-entry
+  (let [expired (atom nil)
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2])})]
+    (testing "before ttl elapses"
+      (write-session as "foo" {:foo 1})
+      (is (= (read-session as "foo") {:foo 1}))
+      (is (nil? @expired)))
+    (Thread/sleep 1500)
+    (testing "after ttl has elapsed"
+      (is (nil? @expired))
+      (is (nil? (read-session as "foo")))
+      (is (= ["foo" {:foo 1}] @expired)))))
+
+(deftest expiry-listener-not-triggered-for-other-read-sessions-even-with-an-expired-entry
+  (let [expired (atom nil)
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2])})]
+    (testing "before ttl elapses"
+      (write-session as "foo" {:foo 1})
+      (write-session as "bar" {:bar 1})
+      (is (= (read-session as "foo") {:foo 1}))
+      (is (= (read-session as "bar") {:bar 1}))
+      (is (nil? @expired)))
+    (testing "delaying while keeping the second entry alive, long enough for the first entry to expire"
+      (Thread/sleep 400)
+      (is (= (read-session as "bar") {:bar 1}))
+      (is (nil? @expired))
+      (Thread/sleep 400)
+      (is (= (read-session as "bar") {:bar 1}))
+      (is (nil? @expired))
+      (Thread/sleep 400)
+      (is (= (read-session as "bar") {:bar 1}))
+      (is (nil? @expired)))
+    (testing "after ttl has elapsed"
+      (is (nil? @expired))
+      (is (nil? (read-session as "foo")))
+      (is (= (read-session as "bar") {:bar 1}))
+      (is (= ["foo" {:foo 1}] @expired)))))
+
+(deftest expiry-listener-triggered-when-write-session-overwrites-expired-entry
+  (let [expired (atom nil)
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2])})]
+    (testing "before ttl elapses"
+      (write-session as "foo" {:foo 1})
+      (is (= (read-session as "foo") {:foo 1}))
+      (is (nil? @expired)))
+    (Thread/sleep 1500)
+    (testing "after ttl has elapsed"
+      (is (nil? @expired))
+      (write-session as "foo" {:foo 2})
+      (is (= (read-session as "foo") {:foo 2}))
+      (is (= ["foo" {:foo 1}] @expired)))))
+
+(deftest sweeper-thread-triggers-expiry-listeners-for-all-expired-entries
+  (let [expired (atom {})
+        as      (aging-memory-store 1 {:sweep-interval 1
+                                       :on-expiry      #(swap! expired assoc %1 {:timestamp (System/currentTimeMillis)
+                                                                                 :value     %2})})]
+    (testing "before ttl elapses or sweeper thread runs"
+      (write-session as "foo" {:foo 1})
+      (write-session as "bar" {:bar 1})
+      (write-session as "keep" {:keep 1})
+      (is (= (read-session as "foo") {:foo 1}))
+      (is (= (read-session as "bar") {:bar 1}))
+      (is (= (read-session as "keep") {:keep 1}))
+      (is (empty? @expired)))
+    (testing "delaying while keeping 1 entry alive, long enough for the rest to expire and sweeper thread to run"
+      (Thread/sleep 500)
+      (is (= (read-session as "keep") {:keep 1}))
+      (Thread/sleep 500)
+      (is (= (read-session as "keep") {:keep 1}))
+      (Thread/sleep 3000))
+    (testing "after ttl elapses and sweeper thread has had enough time to run at least twice"
+      (is (= 3 (count @expired)))
+      (let [foo-bar-time-diff (Math/abs (- (:timestamp (get @expired "foo"))
+                                           (:timestamp (get @expired "bar"))))
+            keep-time-diff    (- (:timestamp (get @expired "keep"))
+                                 (:timestamp (get @expired "bar")))]
+        (testing "'foo' and 'bar' should have expired at roughly the same time. 'keep' at the next sweep interval.")
+        (is (<= foo-bar-time-diff 200))                     ; probably overly generous, but less than one sweep-interval
+        (is (>= keep-time-diff 800))))
+    (stop as)))
+
 #_(run-tests)
