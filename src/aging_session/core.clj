@@ -114,15 +114,21 @@
     (Thread/sleep sweep-interval)
     (recur)))
 
+(def default-opts
+  {:refresh-on-write true
+   :refresh-on-read  true
+   :sweep-threshold  nil
+   :sweep-interval   30})
+
 (defn aging-memory-store
   "Creates an in-memory session storage engine where entries expire after the given ttl"
   [ttl & [opts]]
-  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-threshold sweep-interval]
-         :or   {session-atom     (atom {})
-                refresh-on-write true
-                refresh-on-read  true
-                sweep-threshold  nil
-                sweep-interval   30}} opts
+  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-threshold sweep-interval] :as opts}
+        (merge
+          default-opts
+          {:session-atom (atom {})}
+          opts)
+
         ; internally, we want time values as milliseconds. externally, it is more convenient to have them specified
         ; as seconds because, really, for sessions, no one is really going to want to specify sub-second values for
         ; any of these times! (no, you don't really need a sweeper thread running multiple times per second ...)
