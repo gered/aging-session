@@ -9,9 +9,9 @@
   (aging-memory-store
     30
     (merge
-      {:refresh-on-read  true
-       :refresh-on-write true
-       :sweep-interval   15}
+      {:refresh-on-read?  true
+       :refresh-on-write? true
+       :sweep-interval    15}
       opts)))
 
 (deftest basic-read-empty
@@ -43,8 +43,8 @@
 (deftest timestamp-on-creation
   (testing "Test the behaviour where each entry's timestamp is set only on session creation."
     (let [as (->basic-aging-memory-store
-               {:refresh-on-read  false
-                :refresh-on-write false})]
+               {:refresh-on-read?  false
+                :refresh-on-write? false})]
       (write-session as "mykey" {:foo 1})
       (let [ts1 (read-timestamp as "mykey")]
         (is (integer? ts1)
@@ -59,8 +59,8 @@
 (deftest timestamp-on-write-only
   (testing "Test the behaviour where each entry's timestamp is refreshed on write (not read)."
     (let [as (->basic-aging-memory-store
-               {:refresh-on-read  false
-                :refresh-on-write true})]
+               {:refresh-on-read?  false
+                :refresh-on-write? true})]
       (write-session as "mykey" {:foo 1})
       (let [ts1 (read-timestamp as "mykey")]
         (is (integer? ts1)
@@ -80,8 +80,8 @@
 (deftest timestamp-on-read-only
   (testing "Test the behaviour where each entry's timestamp is refreshed on read (not write)."
     (let [as (->basic-aging-memory-store
-               {:refresh-on-read  true
-                :refresh-on-write false})]
+               {:refresh-on-read?  true
+                :refresh-on-write? false})]
       (write-session as "mykey" {:foo 1})
       (let [ts1 (read-timestamp as "mykey")]
         (is (integer? ts1)
@@ -125,9 +125,9 @@
   (testing "Sweeper thread expires entries whenever it runs."
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
-               {:refresh-on-read  true
-                :refresh-on-write true
-                :sweep-interval   1                         ; sweeper thread tries to run every 1 second
+               {:refresh-on-read?  true
+                :refresh-on-write? true
+                :sweep-interval    1                         ; sweeper thread tries to run every 1 second
                 })]
       (write-session as "mykey" {:foo 1})
       (Thread/sleep 20)
@@ -167,8 +167,8 @@
   (testing "Test an empty session read (with refresh-on-read enabled) then check that the expiry sweep still works"
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
-               {:refresh-on-read true
-                :sweep-interval  1                          ; sweep thread tries to run every 1 second
+               {:refresh-on-read? true
+                :sweep-interval   1                          ; sweep thread tries to run every 1 second
                 })]
       (is (nil? (read-session as "foo"))
           "no session entry present for this key")

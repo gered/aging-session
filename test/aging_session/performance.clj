@@ -17,8 +17,8 @@
   [ttl]
   (aging-memory-store
     ttl
-    {:refresh-on-write true
-     :refresh-on-read  true}))
+    {:refresh-on-write? true
+     :refresh-on-read?  true}))
 
 (defn check-nonexistent-read
   []

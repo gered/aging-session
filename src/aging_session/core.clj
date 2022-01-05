@@ -145,14 +145,14 @@
     (recur)))
 
 (def default-opts
-  {:refresh-on-write true
-   :refresh-on-read  true
-   :sweep-interval   30})
+  {:refresh-on-write? true
+   :refresh-on-read?  true
+   :sweep-interval    30})
 
 (defn aging-memory-store
   "Creates an in-memory session storage engine where entries expire after the given ttl"
   [ttl & [opts]]
-  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-interval on-removal] :as opts}
+  (let [{:keys [session-atom refresh-on-write? refresh-on-read? sweep-interval on-removal] :as opts}
         (merge
           default-opts
           {:session-atom (atom {})}
@@ -170,7 +170,7 @@
                              (sweeper-thread session-atom ttl sweep-interval on-removal)
                              (catch InterruptedException e))))
         store          (MemoryAgingStore.
-                         session-atom thread ttl refresh-on-write refresh-on-read on-removal)]
+                         session-atom thread ttl refresh-on-write? refresh-on-read? on-removal)]
     (.start thread)
     store))
 
