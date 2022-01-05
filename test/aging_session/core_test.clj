@@ -11,7 +11,6 @@
     (merge
       {:refresh-on-read  true
        :refresh-on-write true
-       :sweep-threshold  nil
        :sweep-interval   15}
       opts)))
 
@@ -113,8 +112,7 @@
   (testing "Individual session entries are expired appropriately when read, independently of the sweep thread."
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
-               {:sweep-threshold 1                          ; sweeper thread write threshold is after every single write
-                :sweep-interval  10                         ; sweeper thread tries to run every 10 seconds
+               {:sweep-interval  10                         ; sweeper thread tries to run every 10 seconds
                 })]
       (write-session as "mykey" {:foo 1})
       (is (= (read-session as "mykey") {:foo 1})
@@ -123,45 +121,12 @@
       (is (nil? (read-session as "mykey"))
           "session entry should no longer be present"))))
 
-(deftest sweeper-thread-expires-entries-at-interval-only-when-threshold-reached
-  (testing "When a threshold is specified, the sweeper thread expires entries whenever it runs only when the operation (write) threshold is reached."
+(deftest sweeper-thread-expires-entries-at-interval
+  (testing "Sweeper thread expires entries whenever it runs."
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
                {:refresh-on-read  true
                 :refresh-on-write true
-                :sweep-threshold  5                         ; only trigger sweep after 5 writes
-                :sweep-interval   1                         ; sweeper thread tries to run every 1 second
-                })]
-      (write-session as "mykey" {:foo 1})
-      (Thread/sleep 2000)                                   ; wait long enough for session ttl to elapse
-      ; key should still exist, even though it's expired (not enough writes have occurred)
-      (is (integer? (read-timestamp as "mykey"))
-          "session entry should still be present even though it has expired")
-
-      ; key should exist for three more writes
-      (write-session as "other-key" {:foo 1})
-      (is (integer? (read-timestamp as "mykey"))
-          "session entry should still be present even though it has expired")
-      (write-session as "other-key" {:foo 1})
-      (is (integer? (read-timestamp as "mykey"))
-          "session entry should still be present even though it has expired")
-      (write-session as "other-key" {:foo 1})
-      (is (integer? (read-timestamp as "mykey"))
-          "session entry should still be present even though it has expired")
-
-      ; on the fifth write and after 1 second, key should not exist
-      (write-session as "other-key" {:foo 1})
-      (Thread/sleep 2000)                                   ; allow time for sweeper thread to run
-      (is (nil? (read-timestamp as "mykey"))
-          "session entry should have been removed now"))))
-
-(deftest sweeper-thread-expires-entries-at-interval-with-no-threshold-set
-  (testing "When a threshold is NOT specified, the sweeper thread expires entries whenever it runs."
-    (let [as (aging-memory-store
-               1                                            ; expire after 1 second
-               {:refresh-on-read  true
-                :refresh-on-write true
-                :sweep-threshold  nil                       ; no sweeper thread threshold
                 :sweep-interval   1                         ; sweeper thread tries to run every 1 second
                 })]
       (write-session as "mykey" {:foo 1})
@@ -203,7 +168,6 @@
     (let [as (aging-memory-store
                1                                            ; expire after 1 second
                {:refresh-on-read true
-                :sweep-threshold 1                          ; sweep runs after every write
                 :sweep-interval  1                          ; sweep thread tries to run every 1 second
                 })]
       (is (nil? (read-session as "foo"))

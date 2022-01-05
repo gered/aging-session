@@ -73,7 +73,7 @@
   (all-entries [store]
     "Returns a map containing all entries currently in the session store."))
 
-(defrecord MemoryAgingStore [session-atom thread ttl refresh-on-write refresh-on-read op-counter op-threshold on-removal]
+(defrecord MemoryAgingStore [session-atom thread ttl refresh-on-write refresh-on-read on-removal]
   AgingStore
   (read-timestamp [_ key]
     (get-in @session-atom [key :timestamp]))
@@ -97,8 +97,6 @@
             nil)))))
 
   (write-session [_ key data]
-    (if op-threshold
-      (swap! op-counter inc))
     (let [key (or key (unique-id))]
       (if on-removal
         ; when we have an on-removal listener, we need to check if we are overwriting an entry
@@ -128,13 +126,9 @@
 
 (defn- sweeper-thread
   "Sweeper thread that watches the session and cleans it."
-  [session-atom ttl op-counter op-threshold sweep-interval on-removal]
+  [session-atom ttl sweep-interval on-removal]
   (loop []
-    (let [[old new] (if op-threshold
-                      (when (>= @op-counter op-threshold)
-                        (reset! op-counter 0)
-                        (swap-vals! session-atom sweep-session ttl))
-                      (swap-vals! session-atom sweep-session ttl))]
+    (let [[old new] (swap-vals! session-atom sweep-session ttl)]
       (if (and on-removal
                (not= old new))
         ; TODO: is there a faster way to get the keys difference? maybe this is fine ... ?
@@ -153,13 +147,12 @@
 (def default-opts
   {:refresh-on-write true
    :refresh-on-read  true
-   :sweep-threshold  nil
    :sweep-interval   30})
 
 (defn aging-memory-store
   "Creates an in-memory session storage engine where entries expire after the given ttl"
   [ttl & [opts]]
-  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-threshold sweep-interval on-removal] :as opts}
+  (let [{:keys [session-atom refresh-on-write refresh-on-read sweep-interval on-removal] :as opts}
         (merge
           default-opts
           {:session-atom (atom {})}
@@ -170,15 +163,14 @@
         ; any of these times! (no, you don't really need a sweeper thread running multiple times per second ...)
         sweep-interval (* 1000 sweep-interval)
         ttl            (* 1000 ttl)
-        op-counter     (if sweep-threshold (atom 0))
         thread         (Thread.
                          ^Runnable
                          (fn []
                            (try
-                             (sweeper-thread session-atom ttl op-counter sweep-threshold sweep-interval on-removal)
+                             (sweeper-thread session-atom ttl sweep-interval on-removal)
                              (catch InterruptedException e))))
         store          (MemoryAgingStore.
-                         session-atom thread ttl refresh-on-write refresh-on-read op-counter sweep-threshold on-removal)]
+                         session-atom thread ttl refresh-on-write refresh-on-read on-removal)]
     (.start thread)
     store))
 
