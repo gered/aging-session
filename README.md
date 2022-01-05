@@ -15,7 +15,7 @@ sessions are expired appropriately even if they are no longer being visited.
 ## Leiningen
 
 ```clj
-[net.gered/aging-session "0.1.0"]
+[net.gered/aging-session "0.2.0"]
 ```
 
 ## This is a fork!
