@@ -1,18 +1,16 @@
 # aging-session
 
-A memory based ring session store that has a concept of time. The primary goal
-is to allow the session store to deallocate old sessions. While much of this
-may be written on top of the standard ring session store, there is ultimately
-no way to get rid of sessions that are no longer being visited.
+A memory based [Ring session store](https://github.com/ring-clojure/ring/wiki/Sessions#session-stores) that has a 
+concept of time. The primary goal is to allow the session store to deallocate old sessions. While much of this may be 
+written on top of the standard Ring session store, there is ultimately no way to get rid of sessions that are no longer
+being visited.
 
-Depending on how long running a server is and on how big its sessions are,
-the unallocated sessions can potentially accumulate more and more memory.
-Another possible scenario is a denial of service attack where the attacker
-continually asks for new sessions thus exhusting the server of memory.
+Depending on how long running a server is and on how big its sessions are, the unallocated sessions can potentially 
+accumulate more and more memory. Another possible scenario is a denial of service attack where the attacker continually
+asks for new sessions thus exhausting the server of memory.
 
-This session store has a sweeper thread that will apply a set of functions
-to every session object after every X requests are made. These functions
-are also applied to every session when it is read.
+This session store has a sweeper thread that will apply time-based expiry to sessions being held in memory, so that
+sessions are expired appropriately even if they are no longer being visited.
 
 ## Leiningen
 
@@ -55,39 +53,74 @@ very quickly become apparent and you will probably need to find an alternative s
 
 ## Usage
 
-The following creates a memory aging store that refreshes the timestamp every
-time the session is written and erases entries after 1 hour.
+For the vast majority of applications, you can switch to aging-session's session store by replacing usage of Ring's
+`memory-store` with aging-session's `aging-memory-store` and supplying a session expiry time (in seconds).
 
 ```clojure
 (ns myapp
-  (:use 
-    ring.middleware.session
-    aging-session.memory)
-  (:require ['aging-session.event :as event]))
+  (:require
+    [aging-session.core :refer [aging-memory-store]]
+    [ring.middleware.session :refer [wrap-session]]))
+
+(def session-store
+  (aging-memory-store 3600))
 
 (def app
-  (wrap-session handler {:store (aging-memory-store 
-                                  :refresh-on-write true
-                                  :events           [(event/expires-after 3600)])}))
+  (wrap-session handler {:store session-store}))
 ```
 
-Event functions take two parameters: the current timestamp and a session entry
-with a timestamp key and an value key. The timestamp key stores the sessions
-timestamp and the value key stores the session itself. Functions should return
-a new entry, or nil. If they return nil, the session entry is deleted. The
-expires after function illustrates this.
+The default configuration used by `aging-memory-store` will result in a session store where session entries have their 
+timestamp refreshed whenever read or written to. As well, the session store will have an associated "sweeper thread" 
+which will run every 30 seconds across each session entry and remove expired sessions if needed.
+
+You can adjust these defaults with an alternate configuration map supplied to `aging-memory-store`:
 
 ```clojure
-(defn expires-after
-  "Expires an entry if left untouched for a given number of seconds."
-  [seconds]
-  (let [ms (* 1000 seconds)]
-    (fn [now entry] (if-not (> (- now (:timestamp entry)) ms) entry))))
+(def session-store
+  (aging-memory-store
+    3600
+    {:refresh-on-read?  true
+     :refresh-on-write? true
+     :sweep-interval    30}))
+
+(def app
+  (wrap-session handler {:store session-store}))
 ```
 
-Event functions are applied in order and can be used to modify sessions in
-any time-based way. For instance, one may wish to set a reauthentication flag
-in sessions older than 1 hour, and delete sessions older than 2 hours.
+### Removal Listeners
+
+You can also make use of "removal listeners" to get a notification whenever any session entry is expired or removed for
+any reason. This can be useful in some applications which may need to perform actions to clean other things up, or to
+notify the user's browser in realtime to let them know their session has expired (for example).
+
+```clojure
+(def session-store
+  (aging-memory-store
+    3600
+    {:on-removal
+     (fn [id data reason]
+       (println (format "session removed because of %s. session-id: %s, data: %s"
+                        reason id data)))}))
+
+(def app
+  (wrap-session handler {:store session-store}))
+```
+
+Currently the only two removal reasons that will occur are `:expired` (obviously only occurs as a result of a session
+entry expiring due to age) and `:deleted` (only occurs as a result of the session being explicitly removed by the
+server through a call to `delete-session`).
+
+### Stopping the Session Store
+
+Some applications will not need to care about this, but because aging-session's session store has an associated 
+"sweeper thread" it is important to at least point this out so developers are aware of this.
+
+If you ever have any reason in your application to restart your Ring handler (e.g. because you use something like
+[Component](https://github.com/stuartsierra/component) or [Mount](https://github.com/tolitius/mount) and have your Ring
+handler itself set up as a restartable component), then you should take care to _also_ define your aging-session store 
+as a component too, and to explicitly call `aging-session.core/stop` on the session store when it needs to be stopped. 
+The `stop` function will interrupt the sweeper thread so that it is otherwise not left dangling.
+
 
 
 ## License
