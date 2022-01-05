@@ -83,15 +83,17 @@
 
   SessionStore
   (read-session [_ key]
-    (when-let [existing-entry (get @session-atom key)]
-      (let [session-map (swap! session-atom process-read-entry ttl key refresh-on-read)]
+    (when (contains? @session-atom key)
+      (let [[previous current] (swap-vals! session-atom process-read-entry ttl key refresh-on-read)]
         ; if the entry we were about to read had expired, session-map will not have it anymore at this point
-        (if (contains? session-map key)
-          (-> session-map                                   ; note: performs faster than get-in
+        (if (contains? current key)
+          (-> current                                       ; note: performs faster than get-in
               (get key)
               (get :value))
-          (when on-removal
-            (on-removal key (:value existing-entry) :expired)
+          (when (and on-removal
+                     ; just in case there was a last second change by other concurrently running actions ...
+                     (contains? previous key))
+            (on-removal key (-> previous (get key) :value) :expired)
             nil)))))
 
   (write-session [_ key data]
@@ -99,13 +101,13 @@
       (swap! op-counter inc))
     (let [key (or key (unique-id))]
       (if on-removal
-        ; when we have an on-removal listener, we need to check if we are about to overwrite an entry
+        ; when we have an on-removal listener, we need to check if we are overwriting an entry
         ; that has already expired, and if so, call on-removal for it
         ; (note that if it has ALREADY expired, yes, we're about to overwrite this entry anyway, but
         ;  we DO need to treat it as an expiry, because the old value expired ...)
-        (let [existing-entry (get @session-atom key)
-              expired?       (entry-expired? ttl existing-entry)]
-          (swap! session-atom process-write-entry key data refresh-on-write)
+        (let [[previous current] (swap-vals! session-atom process-write-entry key data refresh-on-write)
+              existing-entry     (get previous key)
+              expired?           (entry-expired? ttl existing-entry)]
           (if expired?
             (on-removal key (:value existing-entry) :expired)))
         ; if there's no on-removal listener, we can simply process the write
