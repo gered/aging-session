@@ -113,7 +113,15 @@
       key))
 
   (delete-session [_ key]
-    (swap! session-atom dissoc key)
+    (if on-expiry
+      ; if we have an on-expiry listener, we need to check if we actually removed the entry
+      ; and then call on-expiry
+      (let [[old new] (swap-vals! session-atom dissoc key)]
+        (if (and (contains? old key)
+                 (not (contains? new key)))
+          (on-expiry key (-> old (get key) :value) :deleted)))
+      ; if there's no on-expiry listener, just do the delete
+      (swap! session-atom dissoc key))
     nil))
 
 (defn- sweeper-thread

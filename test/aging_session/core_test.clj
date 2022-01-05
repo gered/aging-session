@@ -320,4 +320,20 @@
         (is (>= keep-time-diff 800))))
     (stop as)))
 
+(deftest expiry-listener-triggered-when-delete-session-removes-entry
+  (let [expired (atom nil)
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
+    (write-session as "foo" {:foo 1})
+    (is (= (read-session as "foo") {:foo 1}))
+    (is (nil? @expired))
+    (delete-session as "foo")
+    (is (= ["foo" {:foo 1} :deleted] @expired))
+    (is (nil? (read-session as "foo")))))
+
+(deftest expiry-listener-not-triggered-when-delete-session-called-for-non-existent-key
+  (let [expired (atom nil)
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
+    (delete-session as "foo")
+    (is (nil? @expired))))
+
 #_(run-tests)
