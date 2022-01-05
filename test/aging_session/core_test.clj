@@ -236,62 +236,62 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(deftest expiry-listener-triggered-when-read-session-expires-entry
-  (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
+(deftest removal-listener-triggered-when-read-session-expires-entry
+  (let [removed (atom nil)
+        as      (aging-memory-store 1 {:on-removal #(reset! removed [%1 %2 %3])})]
     (testing "before ttl elapses"
       (write-session as "foo" {:foo 1})
       (is (= (read-session as "foo") {:foo 1}))
-      (is (nil? @expired)))
+      (is (nil? @removed)))
     (Thread/sleep 1500)
     (testing "after ttl has elapsed"
-      (is (nil? @expired))
+      (is (nil? @removed))
       (is (nil? (read-session as "foo")))
-      (is (= ["foo" {:foo 1} :expired] @expired)))))
+      (is (= ["foo" {:foo 1} :expired] @removed)))))
 
-(deftest expiry-listener-not-triggered-for-other-read-sessions-even-with-an-expired-entry
-  (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
+(deftest removal-listener-not-triggered-for-other-read-sessions-even-with-an-expired-entry
+  (let [removed (atom nil)
+        as      (aging-memory-store 1 {:on-removal #(reset! removed [%1 %2 %3])})]
     (testing "before ttl elapses"
       (write-session as "foo" {:foo 1})
       (write-session as "bar" {:bar 1})
       (is (= (read-session as "foo") {:foo 1}))
       (is (= (read-session as "bar") {:bar 1}))
-      (is (nil? @expired)))
+      (is (nil? @removed)))
     (testing "delaying while keeping the second entry alive, long enough for the first entry to expire"
       (Thread/sleep 400)
       (is (= (read-session as "bar") {:bar 1}))
-      (is (nil? @expired))
+      (is (nil? @removed))
       (Thread/sleep 400)
       (is (= (read-session as "bar") {:bar 1}))
-      (is (nil? @expired))
+      (is (nil? @removed))
       (Thread/sleep 400)
       (is (= (read-session as "bar") {:bar 1}))
-      (is (nil? @expired)))
+      (is (nil? @removed)))
     (testing "after ttl has elapsed"
-      (is (nil? @expired))
+      (is (nil? @removed))
       (is (nil? (read-session as "foo")))
       (is (= (read-session as "bar") {:bar 1}))
-      (is (= ["foo" {:foo 1} :expired] @expired)))))
+      (is (= ["foo" {:foo 1} :expired] @removed)))))
 
-(deftest expiry-listener-triggered-when-write-session-overwrites-expired-entry
-  (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
+(deftest removal-listener-triggered-when-write-session-overwrites-expired-entry
+  (let [removed (atom nil)
+        as      (aging-memory-store 1 {:on-removal #(reset! removed [%1 %2 %3])})]
     (testing "before ttl elapses"
       (write-session as "foo" {:foo 1})
       (is (= (read-session as "foo") {:foo 1}))
-      (is (nil? @expired)))
+      (is (nil? @removed)))
     (Thread/sleep 1500)
     (testing "after ttl has elapsed"
-      (is (nil? @expired))
+      (is (nil? @removed))
       (write-session as "foo" {:foo 2})
       (is (= (read-session as "foo") {:foo 2}))
-      (is (= ["foo" {:foo 1} :expired] @expired)))))
+      (is (= ["foo" {:foo 1} :expired] @removed)))))
 
-(deftest sweeper-thread-triggers-expiry-listeners-for-all-expired-entries
-  (let [expired (atom {})
+(deftest sweeper-thread-triggers-removal-listeners-for-all-expired-entries
+  (let [removed (atom {})
         as      (aging-memory-store 1 {:sweep-interval 1
-                                       :on-expiry      #(swap! expired assoc %1 {:timestamp (System/currentTimeMillis)
+                                       :on-removal     #(swap! removed assoc %1 {:timestamp (System/currentTimeMillis)
                                                                                  :value     %2
                                                                                  :reason    %3})})]
     (testing "before ttl elapses or sweeper thread runs"
@@ -301,7 +301,7 @@
       (is (= (read-session as "foo") {:foo 1}))
       (is (= (read-session as "bar") {:bar 1}))
       (is (= (read-session as "keep") {:keep 1}))
-      (is (empty? @expired)))
+      (is (empty? @removed)))
     (testing "delaying while keeping 1 entry alive, long enough for the rest to expire and sweeper thread to run"
       (Thread/sleep 500)
       (is (= (read-session as "keep") {:keep 1}))
@@ -309,31 +309,31 @@
       (is (= (read-session as "keep") {:keep 1}))
       (Thread/sleep 3000))
     (testing "after ttl elapses and sweeper thread has had enough time to run at least twice"
-      (is (= 3 (count @expired)))
-      (is (every? #(= :expired (:reason %)) (vals @expired)))
-      (let [foo-bar-time-diff (Math/abs (- (:timestamp (get @expired "foo"))
-                                           (:timestamp (get @expired "bar"))))
-            keep-time-diff    (- (:timestamp (get @expired "keep"))
-                                 (:timestamp (get @expired "bar")))]
+      (is (= 3 (count @removed)))
+      (is (every? #(= :expired (:reason %)) (vals @removed)))
+      (let [foo-bar-time-diff (Math/abs (- (:timestamp (get @removed "foo"))
+                                           (:timestamp (get @removed "bar"))))
+            keep-time-diff    (- (:timestamp (get @removed "keep"))
+                                 (:timestamp (get @removed "bar")))]
         (testing "'foo' and 'bar' should have expired at roughly the same time. 'keep' at the next sweep interval.")
         (is (<= foo-bar-time-diff 200))                     ; probably overly generous, but less than one sweep-interval
         (is (>= keep-time-diff 800))))
     (stop as)))
 
-(deftest expiry-listener-triggered-when-delete-session-removes-entry
-  (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
+(deftest removal-listener-triggered-when-delete-session-removes-entry
+  (let [removed (atom nil)
+        as      (aging-memory-store 1 {:on-removal #(reset! removed [%1 %2 %3])})]
     (write-session as "foo" {:foo 1})
     (is (= (read-session as "foo") {:foo 1}))
-    (is (nil? @expired))
+    (is (nil? @removed))
     (delete-session as "foo")
-    (is (= ["foo" {:foo 1} :deleted] @expired))
+    (is (= ["foo" {:foo 1} :deleted] @removed))
     (is (nil? (read-session as "foo")))))
 
-(deftest expiry-listener-not-triggered-when-delete-session-called-for-non-existent-key
-  (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
+(deftest removal-listener-not-triggered-when-delete-session-called-for-non-existent-key
+  (let [removed (atom nil)
+        as      (aging-memory-store 1 {:on-removal #(reset! removed [%1 %2 %3])})]
     (delete-session as "foo")
-    (is (nil? @expired))))
+    (is (nil? @removed))))
 
 #_(run-tests)
