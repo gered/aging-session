@@ -238,7 +238,7 @@
 
 (deftest expiry-listener-triggered-when-read-session-expires-entry
   (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2])})]
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
     (testing "before ttl elapses"
       (write-session as "foo" {:foo 1})
       (is (= (read-session as "foo") {:foo 1}))
@@ -247,11 +247,11 @@
     (testing "after ttl has elapsed"
       (is (nil? @expired))
       (is (nil? (read-session as "foo")))
-      (is (= ["foo" {:foo 1}] @expired)))))
+      (is (= ["foo" {:foo 1} :expired] @expired)))))
 
 (deftest expiry-listener-not-triggered-for-other-read-sessions-even-with-an-expired-entry
   (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2])})]
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
     (testing "before ttl elapses"
       (write-session as "foo" {:foo 1})
       (write-session as "bar" {:bar 1})
@@ -272,11 +272,11 @@
       (is (nil? @expired))
       (is (nil? (read-session as "foo")))
       (is (= (read-session as "bar") {:bar 1}))
-      (is (= ["foo" {:foo 1}] @expired)))))
+      (is (= ["foo" {:foo 1} :expired] @expired)))))
 
 (deftest expiry-listener-triggered-when-write-session-overwrites-expired-entry
   (let [expired (atom nil)
-        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2])})]
+        as      (aging-memory-store 1 {:on-expiry #(reset! expired [%1 %2 %3])})]
     (testing "before ttl elapses"
       (write-session as "foo" {:foo 1})
       (is (= (read-session as "foo") {:foo 1}))
@@ -286,13 +286,14 @@
       (is (nil? @expired))
       (write-session as "foo" {:foo 2})
       (is (= (read-session as "foo") {:foo 2}))
-      (is (= ["foo" {:foo 1}] @expired)))))
+      (is (= ["foo" {:foo 1} :expired] @expired)))))
 
 (deftest sweeper-thread-triggers-expiry-listeners-for-all-expired-entries
   (let [expired (atom {})
         as      (aging-memory-store 1 {:sweep-interval 1
                                        :on-expiry      #(swap! expired assoc %1 {:timestamp (System/currentTimeMillis)
-                                                                                 :value     %2})})]
+                                                                                 :value     %2
+                                                                                 :reason    %3})})]
     (testing "before ttl elapses or sweeper thread runs"
       (write-session as "foo" {:foo 1})
       (write-session as "bar" {:bar 1})
@@ -309,6 +310,7 @@
       (Thread/sleep 3000))
     (testing "after ttl elapses and sweeper thread has had enough time to run at least twice"
       (is (= 3 (count @expired)))
+      (is (every? #(= :expired (:reason %)) (vals @expired)))
       (let [foo-bar-time-diff (Math/abs (- (:timestamp (get @expired "foo"))
                                            (:timestamp (get @expired "bar"))))
             keep-time-diff    (- (:timestamp (get @expired "keep"))

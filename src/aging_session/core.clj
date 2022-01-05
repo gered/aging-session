@@ -91,7 +91,7 @@
               (get key)
               (get :value))
           (when on-expiry
-            (on-expiry key (:value existing-entry))
+            (on-expiry key (:value existing-entry) :expired)
             nil)))))
 
   (write-session [_ key data]
@@ -107,7 +107,7 @@
               expired?       (entry-expired? ttl existing-entry)]
           (swap! session-atom process-write-entry key data refresh-on-write)
           (if expired?
-            (on-expiry key (:value existing-entry))))
+            (on-expiry key (:value existing-entry) :expired)))
         ; if there's no on-expiry listener, we can simply process the write
         (swap! session-atom process-write-entry key data refresh-on-write))
       key))
@@ -134,7 +134,9 @@
           (when expired-keys
             (future
               (doseq [expired-key expired-keys]
-                (on-expiry expired-key (-> old (get expired-key) :value))))))))
+                (on-expiry expired-key
+                           (-> old (get expired-key) :value)
+                           :expired)))))))
     (Thread/sleep sweep-interval)
     (recur)))
 
